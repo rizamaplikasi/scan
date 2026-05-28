@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Kasir Pintar (Web POS)</title>
+    
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    
+    <style>
+        :root {
+            --primary: #2c3e50;
+            --success: #27ae60;
+            --danger: #e74c3c;
+            --bg: #f4f7f6;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg);
+            color: #333;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h2 { text-align: center; color: var(--primary); }
+        
+        /* Tombol & Input */
+        button {
+            padding: 10px 15px; border: none; border-radius: 5px;
+            cursor: pointer; font-weight: bold; color: white;
+            transition: 0.2s;
+        }
+        button:hover { opacity: 0.9; }
+        .btn-success { background-color: var(--success); }
+        .btn-danger { background-color: var(--danger); }
+        .btn-primary { background-color: var(--primary); }
+        .btn-bayar { background-color: var(--success); width: 100%; font-size: 1.2em; padding: 15px; margin-top: 15px;}
+        .btn-bayar:disabled { background-color: #95a5a6; cursor: not-allowed; }
+        
+        input {
+            width: 100%; padding: 10px; margin: 10px 0;
+            border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box;
+            font-size: 1.1em;
+        }
+
+        /* Tampilan Mode Kasir, Pembayaran, Struk */
+        .view-section { display: none; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); margin-bottom: 20px;}
+        .view-section.active { display: block; }
+
+        /* Scanner */
+        #reader { width: 100%; max-width: 400px; margin: 0 auto; border-radius: 10px; overflow: hidden; }
+
+        /* Tabel Keranjang */
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background-color: #f8f9fa; }
+        .qty-controls { display: flex; gap: 5px; align-items: center;}
+        .qty-btn { background: #ecf0f1; color: #333; padding: 5px 10px; }
+
+        /* Info Total */
+        .total-box {
+            background-color: var(--primary); color: white;
+            padding: 15px; border-radius: 8px; font-size: 1.5em;
+            text-align: right; margin-top: 20px; font-weight: bold;
+        }
+
+        /* Modal Tambah Barang */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.6); display: none;
+            justify-content: center; align-items: center; z-index: 1000;
+        }
+        .modal-content { background: white; padding: 30px; border-radius: 10px; width: 90%; max-width: 400px;}
+
+        /* Desain Struk (Receipt) */
+        .receipt {
+            font-family: 'Courier New', Courier, monospace; background: white;
+            padding: 20px; width: 300px; margin: 0 auto;
+            border: 1px dashed #ccc; box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .receipt h3 { text-align: center; margin: 0 0 10px 0; }
+        .receipt .divider { border-bottom: 1px dashed #333; margin: 10px 0; }
+        .receipt-item { display: flex; justify-content: space-between; margin-bottom: 5px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Mesin Kasir Pintar</h2>
+
+    <div id="view-kasir" class="view-section active">
+        <div id="reader"></div>
+        <p style="text-align: center; color: #7f8c8d; font-size: 0.9em;">Arahkan kamera ke barcode/QR Code. Jika barang belum terdaftar, Anda akan diminta memasukkan harga.</p>
+        
+        <div style="overflow-x: auto;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Barang</th>
+                        <th>Harga</th>
+                        <th>Jml</th>
+                        <th>Subtotal</th>
+                        <th>Aksi</th>
+                    </tr>
+                </thead>
+                <tbody id="cart-body">
+                    </tbody>
+            </table>
+        </div>
+
+        <div class="total-box">
+            Total: <span id="grand-total-display">Rp 0</span>
+        </div>
+        <button class="btn-success" style="width: 100%; margin-top: 15px; font-size: 1.2em; padding: 15px;" onclick="goToPayment()">🛒 CHECKOUT</button>
+    </div>
+
+    <div id="view-payment" class="view-section">
+        <h3>Proses Pembayaran</h3>
+        <div class="total-box" style="text-align: center; background-color: #34495e;">
+            Total Tagihan<br><span id="pay-total" style="font-size: 1.5em; color: #f1c40f;">Rp 0</span>
+        </div>
+        
+        <label style="font-weight: bold; margin-top: 20px; display: block;">Uang Pembeli (Rp):</label>
+        <input type="number" id="input-uang" placeholder="Masukkan nominal uang..." oninput="calculateChange()">
+        
+        <div style="font-size: 1.2em; margin-top: 15px; font-weight: bold;">
+            Kembalian: <span id="pay-change" style="color: var(--danger);">Rp 0</span>
+        </div>
+
+        <button id="btn-lanjutkan" class="btn-bayar" disabled onclick="processCheckout()">Lanjutkan & Cetak Struk</button>
+        <button class="btn-danger" style="width: 100%; margin-top: 10px; padding: 10px;" onclick="backToKasir()">Batal</button>
+    </div>
+
+    <div id="view-receipt" class="view-section" style="background: transparent; box-shadow: none;">
+        <div class="receipt" id="receipt-paper">
+            <h3>TOKO SERBA ADA</h3>
+            <div style="text-align: center; font-size: 0.8em; margin-bottom: 10px;" id="receipt-date"></div>
+            <div class="divider"></div>
+            <div id="receipt-items"></div>
+            <div class="divider"></div>
+            <div class="receipt-item" style="font-weight: bold;"><span>Total</span><span id="receipt-total">Rp 0</span></div>
+            <div class="receipt-item"><span>Tunai</span><span id="receipt-cash">Rp 0</span></div>
+            <div class="receipt-item"><span>Kembali</span><span id="receipt-change">Rp 0</span></div>
+            <div class="divider"></div>
+            <p style="text-align: center; font-size: 0.8em;">Terima Kasih Atas Kunjungan Anda!</p>
+        </div>
+        <button class="btn-primary" style="width: 100%; margin-top: 20px; padding: 15px; max-width: 300px; display: block; margin-left: auto; margin-right: auto;" onclick="resetTransaction()">Transaksi Baru</button>
+    </div>
+</div>
+
+<div class="modal-overlay" id="modal-add">
+    <div class="modal-content">
+        <h3 style="margin-top:0;">Daftarkan Barang Baru</h3>
+        <p>Barcode: <strong id="new-barcode-display"></strong></p>
+        <input type="text" id="new-item-name" placeholder="Nama Barang (Cth: Indomie Goreng)">
+        <input type="number" id="new-item-price" placeholder="Harga Barang (Cth: 3000)">
+        <button class="btn-success" style="width: 100%; margin-top: 10px;" onclick="saveNewItem()">Simpan & Masukkan Keranjang</button>
+        <button class="btn-danger" style="width: 100%; margin-top: 10px;" onclick="closeModal()">Batal</button>
+    </div>
+</div>
+
+<script>
+    // --- DATABASE & STATE LOKAL ---
+    // Mengambil database barang dari localStorage (agar tidak hilang saat refresh)
+    let inventory = JSON.parse(localStorage.getItem('pos_inventory')) || {};
+    let cart = {}; // Format: { "barcode": { name, price, qty } }
+    let grandTotal = 0;
+    let pendingBarcode = ""; // Menyimpan sementara barcode yang sedang didaftarkan
+    let isProcessingScan = false; // Mencegah scan ganda
+
+    // --- FUNGSI FORMAT RUPIAH ---
+    function formatRupiah(number) {
+        return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(number);
+    }
+
+    // --- FUNGSI SUARA BEEP ---
+    function playBeep() {
+        try {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = ctx.createOscillator();
+            const gainNode = ctx.createGain();
+            osc.connect(gainNode);
+            gainNode.connect(ctx.destination);
+            osc.type = 'sine';
+            osc.frequency.value = 1000; // Nada tinggi
+            gainNode.gain.setValueAtTime(0.1, ctx.currentTime);
+            osc.start();
+            osc.stop(ctx.currentTime + 0.1); // Durasi beep 0.1 detik
+        } catch (e) { console.log("Audio not supported"); }
+    }
+
+    // --- LOGIKA SCANNER ---
+    function onScanSuccess(decodedText, decodedResult) {
+        // Jika sedang di halaman pembayaran/struk, atau sedang isi form, abaikan scan
+        if (isProcessingScan || document.getElementById('view-kasir').style.display === 'none') return;
+        
+        isProcessingScan = true;
+        playBeep();
+
+        // Cek apakah barang ada di database (inventory)
+        if (inventory[decodedText]) {
+            addToCart(decodedText);
+            // Delay sedikit sebelum bisa scan lagi agar tidak ke-scan berkali-kali dalam 1 detik
+            setTimeout(() => { isProcessingScan = false; }, 1000);
+        } else {
+            // Barang belum terdaftar, buka modal form harga
+            pendingBarcode = decodedText;
+            document.getElementById('new-barcode-display').innerText = decodedText;
+            document.getElementById('modal-add').style.display = 'flex';
+            document.getElementById('new-item-name').value = '';
+            document.getElementById('new-item-price').value = '';
+            document.getElementById('new-item-name').focus();
+        }
+    }
+
+    let html5QrcodeScanner = new Html5QrcodeScanner(
+        "reader", { fps: 10, qrbox: {width: 250, height: 250} }, false
+    );
+    html5QrcodeScanner.render(onScanSuccess, (err) => {});
+
+    // --- LOGIKA TAMBAH BARANG BARU ---
+    function saveNewItem() {
+        let name = document.getElementById('new-item-name').value;
+        let price = parseFloat(document.getElementById('new-item-price').value);
+
+        if (!name || isNaN(price) || price <= 0) {
+            alert("Harap isi nama dan harga yang valid!");
+            return;
+        }
+
+        // Simpan ke database lokal
+        inventory[pendingBarcode] = { name: name, price: price };
+        localStorage.setItem('pos_inventory', JSON.stringify(inventory)); // Simpan permanen di browser
+
+        closeModal();
+        addToCart(pendingBarcode); // Langsung masukkan ke keranjang
+    }
+
+    function closeModal() {
+        document.getElementById('modal-add').style.display = 'none';
+        setTimeout(() => { isProcessingScan = false; }, 500); // Lanjutkan scan
+    }
+
+    // --- LOGIKA KERANJANG BELANJA ---
+    function addToCart(barcode) {
+        let item = inventory[barcode];
+        if (cart[barcode]) {
+            cart[barcode].qty += 1; // Jika sudah ada, tambah jumlah
+        } else {
+            cart[barcode] = { name: item.name, price: item.price, qty: 1 }; // Jika baru, masukkan
+        }
+        updateCartUI();
+    }
+
+    function changeQty(barcode, amount) {
+        if (cart[barcode]) {
+            cart[barcode].qty += amount;
+            if (cart[barcode].qty <= 0) {
+                delete cart[barcode]; // Hapus jika jumlah 0
+            }
+            updateCartUI();
+        }
+    }
+
+    function updateCartUI() {
+        let tbody = document.getElementById('cart-body');
+        tbody.innerHTML = '';
+        grandTotal = 0;
+
+        for (let barcode in cart) {
+            let item = cart[barcode];
+            let subtotal = item.price * item.qty;
+            grandTotal += subtotal;
+
+            let tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${item.name}<br><small style="color:gray;">${barcode}</small></td>
+                <td>${formatRupiah(item.price)}</td>
+                <td>
+                    <div class="qty-controls">
+                        <button class="qty-btn" onclick="changeQty('${barcode}', -1)">-</button>
+                        <span>${item.qty}</span>
+                        <button class="qty-btn" onclick="changeQty('${barcode}', 1)">+</button>
+                    </div>
+                </td>
+                <td style="font-weight:bold;">${formatRupiah(subtotal)}</td>
+                <td><button class="btn-danger" style="padding: 5px 10px;" onclick="changeQty('${barcode}', -${item.qty})">X</button></td>
+            `;
+            tbody.appendChild(tr);
+        }
+
+        document.getElementById('grand-total-display').innerText = formatRupiah(grandTotal);
+    }
+
+    // --- LOGIKA HALAMAN (SWITCH VIEW) ---
+    function showView(viewId) {
+        document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
+        document.getElementById(viewId).classList.add('active');
+    }
+
+    // --- LOGIKA PEMBAYARAN ---
+    function goToPayment() {
+        if (Object.keys(cart).length === 0) {
+            alert("Keranjang masih kosong!");
+            return;
+        }
+        document.getElementById('pay-total').innerText = formatRupiah(grandTotal);
+        document.getElementById('input-uang').value = '';
+        document.getElementById('pay-change').innerText = 'Rp 0';
+        document.getElementById('btn-lanjutkan').disabled = true;
+        showView('view-payment');
+    }
+
+    function backToKasir() {
+        showView('view-kasir');
+    }
+
+    function calculateChange() {
+        let uang = parseFloat(document.getElementById('input-uang').value) || 0;
+        let kembalian = uang - grandTotal;
+        let changeDisplay = document.getElementById('pay-change');
+        let btnLanjut = document.getElementById('btn-lanjutkan');
+
+        if (uang >= grandTotal) {
+            changeDisplay.innerText = formatRupiah(kembalian);
+            changeDisplay.style.color = 'var(--success)';
+            btnLanjut.disabled = false;
+        } else {
+            changeDisplay.innerText = "Uang tidak cukup!";
+            changeDisplay.style.color = 'var(--danger)';
+            btnLanjut.disabled = true;
+        }
+    }
+
+    // --- LOGIKA STRUK ---
+    function processCheckout() {
+        let uang = parseFloat(document.getElementById('input-uang').value) || 0;
+        let kembalian = uang - grandTotal;
+
+        // Set Tanggal
+        let now = new Date();
+        document.getElementById('receipt-date').innerText = now.toLocaleString('id-ID');
+
+        // Render Item Struk
+        let receiptItemsHtml = '';
+        for (let barcode in cart) {
+            let item = cart[barcode];
+            let subtotal = item.price * item.qty;
+            receiptItemsHtml += `
+                <div style="margin-bottom: 8px;">
+                    <div>${item.name}</div>
+                    <div class="receipt-item">
+                        <small>${item.qty} x ${formatRupiah(item.price)}</small>
+                        <span>${formatRupiah(subtotal)}</span>
+                    </div>
+                </div>
+            `;
+        }
+        document.getElementById('receipt-items').innerHTML = receiptItemsHtml;
+        document.getElementById('receipt-total').innerText = formatRupiah(grandTotal);
+        document.getElementById('receipt-cash').innerText = formatRupiah(uang);
+        document.getElementById('receipt-change').innerText = formatRupiah(kembalian);
+
+        showView('view-receipt');
+    }
+
+    // --- RESET UNTUK PEMBELI BARU ---
+    function resetTransaction() {
+        cart = {}; // Kosongkan keranjang
+        updateCartUI();
+        showView('view-kasir');
+    }
+</script>
+
+</body>
+</html>
