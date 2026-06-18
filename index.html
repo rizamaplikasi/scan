@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>Pro Code Studio - Professional</title>
+    <style>
+        /* Desain sudah dioptimalkan untuk tampilan professional */
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: 'Segoe UI', Tahoma, sans-serif; background: #1e1e1e; color: #fff; height: 100vh; display: flex; flex-direction: column; }
+        
+        .toolbar { background: #2d2d2d; padding: 10px 20px; display: flex; gap: 10px; align-items: center; border-bottom: 1px solid #444; }
+        button { padding: 8px 15px; cursor: pointer; border-radius: 4px; border: none; background: #444; color: white; transition: 0.2s; font-weight: bold; }
+        button:hover { background: #555; }
+        .btn-run { background: #007acc; }
+        .btn-save { background: #28a745; }
+
+        .tabs { display: flex; background: #252526; }
+        .tab-btn { padding: 10px 20px; cursor: pointer; background: #2d2d2d; border: none; color: #aaa; }
+        .tab-btn.active { background: #1e1e1e; color: #fff; border-top: 2px solid #007acc; }
+
+        .editor-wrapper { flex: 1; position: relative; }
+        .code-input { width: 100%; height: 100%; background: #1e1e1e; color: #d4d4d4; border: none; padding: 20px; font-family: 'Consolas', monospace; font-size: 14px; resize: none; outline: none; display: none; }
+        .code-input.active { display: block; }
+
+        #output-container { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: white; z-index: 1000; }
+        #output { width: 100%; height: 100%; border: none; }
+        .close-btn { position: absolute; top: 10px; right: 20px; background: red; color: white; border: none; padding: 5px 15px; cursor: pointer; z-index: 1001; }
+    </style>
+</head>
+<body>
+
+    <div class="toolbar">
+        <button onclick="undo()">◀ Undo</button>
+        <button onclick="redo()">▶ Redo</button>
+        <button class="btn-save" onclick="saveFile()">💾 Simpan & Download</button>
+        <button class="btn-run" onclick="runCode()">▶ Run Project</button>
+    </div>
+
+    <div class="tabs">
+        <button class="tab-btn active" onclick="showTab('html', this)">index.html</button>
+        <button class="tab-btn" onclick="showTab('css', this)">style.css</button>
+        <button class="tab-btn" onclick="showTab('js', this)">script.js</button>
+    </div>
+
+    <div class="editor-wrapper">
+        <textarea id="htmlCode" class="code-input active" oninput="autoSave()" placeholder=""></textarea>
+        <textarea id="cssCode" class="code-input" oninput="autoSave()" placeholder="/* Tulis CSS di sini */"></textarea>
+        <textarea id="jsCode" class="code-input" oninput="autoSave()" placeholder="// Tulis JavaScript di sini"></textarea>
+    </div>
+
+    <div id="output-container">
+        <button class="close-btn" onclick="closeOutput()">✖ Tutup</button>
+        <iframe id="output"></iframe>
+    </div>
+
+    <script>
+        let history = [{html: "", css: "", js: ""}];
+        let currentIndex = 0;
+
+        function autoSave() {
+            const newState = {
+                html: document.getElementById('htmlCode').value,
+                css: document.getElementById('cssCode').value,
+                js: document.getElementById('jsCode').value
+            };
+            const last = history[currentIndex];
+            if(newState.html !== last.html || newState.css !== last.css || newState.js !== last.js) {
+                history = history.slice(0, currentIndex + 1);
+                history.push(newState);
+                currentIndex++;
+            }
+        }
+
+        function saveFile() {
+            const fileName = prompt("Masukkan nama file yang diinginkan:", "proyek-saya.html");
+            if (!fileName) return;
+
+            const fullCode = `<!DOCTYPE html>\n<html>\n<head>\n<style>${document.getElementById('cssCode').value}</style>\n</head>\n<body>\n${document.getElementById('htmlCode').value}\n<script>${document.getElementById('jsCode').value}<\/script>\n</body>\n</html>`;
+            
+            const blob = new Blob([fullCode], {type: "text/html"});
+            const url = URL.createObjectURL(blob);
+            
+            // Membuat elemen link download sementara
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = fileName.endsWith('.html') ? fileName : fileName + ".html";
+            
+            // Menampilkan tombol download secara virtual (simulasi klik di Chrome)
+            document.body.appendChild(a);
+            a.click();
+            
+            // Membersihkan setelah download
+            setTimeout(() => {
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+            }, 0);
+        }
+
+        // Fungsi lainnya tetap sama...
+        function undo() { if (currentIndex > 0) { currentIndex--; loadState(history[currentIndex]); } }
+        function redo() { if (currentIndex < history.length - 1) { currentIndex++; loadState(history[currentIndex]); } }
+        function loadState(state) {
+            document.getElementById('htmlCode').value = state.html;
+            document.getElementById('cssCode').value = state.css;
+            document.getElementById('jsCode').value = state.js;
+        }
+
+        function showTab(lang, btn) {
+            document.querySelectorAll('.code-input').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+            document.getElementById(lang + 'Code').classList.add('active');
+            btn.classList.add('active');
+        }
+
+        function runCode() {
+            const iframe = document.getElementById('output');
+            iframe.srcdoc = `<html><head><style>${document.getElementById('cssCode').value}</style></head><body>${document.getElementById('htmlCode').value}<script>${document.getElementById('jsCode').value}<\/script></body></html>`;
+            document.getElementById('output-container').style.display = 'block';
+        }
+
+        function closeOutput() { document.getElementById('output-container').style.display = 'none'; }
+    </script>
+</body>
+</html>
