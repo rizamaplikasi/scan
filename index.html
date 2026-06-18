@@ -6,28 +6,24 @@
     <title>Pro Code Studio</title>
     <style>
         * { box-sizing: border-box; }
-        body { margin: 0; font-family: 'Segoe UI', sans-serif; background: #1e1e1e; color: #fff; height: 100vh; display: flex; flex-direction: column; font-size: 16px; }
+        body { margin: 0; font-family: 'Segoe UI', sans-serif; background: #1e1e1e; color: #fff; height: 100vh; display: flex; flex-direction: column; }
         
-        /* Toolbar diperbesar */
-        .toolbar { background: #2d2d2d; padding: 15px; display: flex; gap: 10px; border-bottom: 1px solid #444; flex-wrap: wrap; }
-        button { padding: 12px 20px; cursor: pointer; border-radius: 6px; border: none; background: #444; color: white; font-weight: bold; font-size: 16px; }
+        .toolbar { background: #2d2d2d; padding: 15px; display: flex; gap: 10px; border-bottom: 1px solid #444; flex-wrap: wrap; align-items: center; }
+        button { padding: 14px 20px; cursor: pointer; border-radius: 8px; border: none; background: #444; color: white; font-weight: bold; font-size: 16px; }
         button:hover { background: #555; }
         
-        /* Input Find */
-        #findInput { padding: 10px; border-radius: 6px; border: none; width: 120px; font-size: 16px; }
-
+        #findInput { padding: 12px; border-radius: 8px; border: none; width: 100px; font-size: 16px; }
         .tabs { display: flex; background: #252526; }
-        .tab-btn { padding: 15px; cursor: pointer; background: #2d2d2d; border: none; color: #aaa; flex: 1; font-size: 16px; }
-        .tab-btn.active { background: #1e1e1e; color: #fff; border-top: 3px solid #007acc; }
+        .tab-btn { padding: 18px; cursor: pointer; background: #2d2d2d; border: none; color: #aaa; flex: 1; font-size: 16px; }
+        .tab-btn.active { background: #1e1e1e; color: #fff; border-top: 4px solid #007acc; }
 
         .editor-wrapper { flex: 1; display: flex; flex-direction: column; }
-        .code-input { width: 100%; height: 100%; background: #1e1e1e; color: #d4d4d4; border: none; padding: 20px; font-family: 'Consolas', monospace; font-size: 18px; display: none; resize: none; outline: none; line-height: 1.6; }
+        .code-input { width: 100%; height: 100%; background: #1e1e1e; color: #d4d4d4; border: none; padding: 25px; font-family: 'Consolas', monospace; font-size: 18px; display: none; resize: none; outline: none; }
         .code-input.active { display: block; }
 
-        /* Output Full Screen (Bukan mode desktop) */
         #output-container { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: white; z-index: 1000; }
         #output { width: 100%; height: 100%; border: none; }
-        .close-btn { position: absolute; top: 20px; right: 20px; background: red; padding: 15px 25px; z-index: 1001; font-size: 18px; }
+        .close-btn { position: absolute; top: 20px; right: 20px; background: red; padding: 15px 25px; z-index: 1001; font-size: 18px; color: white; border: none; border-radius: 8px; }
     </style>
 </head>
 <body>
@@ -49,9 +45,9 @@
     </div>
 
     <div class="editor-wrapper">
-        <textarea id="htmlCode" class="code-input active" oninput="autoSave()"></textarea>
-        <textarea id="cssCode" class="code-input" oninput="autoSave()"></textarea>
-        <textarea id="jsCode" class="code-input" oninput="autoSave()"></textarea>
+        <textarea id="htmlCode" class="code-input active" onblur="saveToHistory()"></textarea>
+        <textarea id="cssCode" class="code-input" onblur="saveToHistory()"></textarea>
+        <textarea id="jsCode" class="code-input" onblur="saveToHistory()"></textarea>
     </div>
 
     <div id="output-container">
@@ -60,50 +56,95 @@
     </div>
 
     <script>
-        // Fitur Find sederhana
-        function findText() {
-            const query = document.getElementById('findInput').value.toLowerCase();
-            const activeEditor = document.querySelector('.code-input.active');
-            const text = activeEditor.value.toLowerCase();
-            if (query && text.includes(query)) {
-                const index = text.indexOf(query);
-                activeEditor.focus();
-                activeEditor.setSelectionRange(index, index + query.length);
+        let history = [{html: "", css: "", js: ""}];
+        let currentIndex = 0;
+
+        // Fungsi menyimpan riwayat saat berpindah fokus dari area edit
+        function saveToHistory() {
+            const current = {
+                html: document.getElementById('htmlCode').value,
+                css: document.getElementById('cssCode').value,
+                js: document.getElementById('jsCode').value
+            };
+            
+            // Hanya simpan jika ada perubahan dari riwayat terakhir
+            if (JSON.stringify(current) !== JSON.stringify(history[currentIndex])) {
+                history = history.slice(0, currentIndex + 1);
+                history.push(current);
+                currentIndex++;
             }
         }
 
-        // Fungsi Run disesuaikan agar tidak terlihat seperti mode desktop
-        function runCode() {
-            const iframe = document.getElementById('output');
-            const html = document.getElementById('htmlCode').value;
-            const css = document.getElementById('cssCode').value;
-            const js = document.getElementById('jsCode').value;
-            
-            // Menggunakan srcdoc agar tampilan murni mengikuti ukuran layar perangkat
-            iframe.srcdoc = `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1.0"><style>${css}</style></head><body>${html}<script>${js}<\/script></body></html>`;
-            document.getElementById('output-container').style.display = 'block';
+        function undo() {
+            if (currentIndex > 0) {
+                currentIndex--;
+                loadState(history[currentIndex]);
+            }
         }
 
-        // Fungsi lainnya tetap sama...
-        function autoSave() { /* Logika sama */ }
-        function saveFile() { 
+        function redo() {
+            if (currentIndex < history.length - 1) {
+                currentIndex++;
+                loadState(history[currentIndex]);
+            }
+        }
+
+        function loadState(state) {
+            document.getElementById('htmlCode').value = state.html;
+            document.getElementById('cssCode').value = state.css;
+            document.getElementById('jsCode').value = state.js;
+        }
+
+        // Fungsi-fungsi lain (loadFile, saveFile, runCode, dll) tetap berfungsi seperti sebelumnya.
+        function loadFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const content = e.target.result;
+                const cssMatch = content.match(/<style>([\s\S]*?)<\/style>/i);
+                const jsMatch = content.match(/<script>([\s\S]*?)<\/script>/i);
+                document.getElementById('cssCode').value = cssMatch ? cssMatch[1].trim() : "";
+                document.getElementById('jsCode').value = jsMatch ? jsMatch[1].trim() : "";
+                document.getElementById('htmlCode').value = content.replace(/<style>[\s\S]*?<\/style>/i, "").replace(/<script>[\s\S]*?<\/script>/i, "").trim();
+            };
+            reader.readAsText(file);
+        }
+
+        function saveFile() {
             let fileName = prompt("Nama file:", "rcode.html") || "rcode.html";
             if (!fileName.endsWith('.html')) fileName += ".html";
-            const blob = new Blob([document.getElementById('htmlCode').value], {type: "text/html"});
+            const fullCode = `<!DOCTYPE html><html><head><style>${document.getElementById('cssCode').value}</style></head><body>${document.getElementById('htmlCode').value}<script>${document.getElementById('jsCode').value}<\/script></body></html>`;
+            const blob = new Blob([fullCode], {type: "text/html"});
             const a = document.createElement("a");
             a.href = URL.createObjectURL(blob);
             a.download = fileName;
             a.click();
         }
+
+        function findText() {
+            const query = document.getElementById('findInput').value.toLowerCase();
+            const activeEditor = document.querySelector('.code-input.active');
+            const index = activeEditor.value.toLowerCase().indexOf(query);
+            if (query && index !== -1) {
+                activeEditor.focus();
+                activeEditor.setSelectionRange(index, index + query.length);
+            }
+        }
+
+        function runCode() {
+            const iframe = document.getElementById('output');
+            iframe.srcdoc = `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1.0"><style>${document.getElementById('cssCode').value}</style></head><body>${document.getElementById('htmlCode').value}<script>${document.getElementById('jsCode').value}<\/script></body></html>`;
+            document.getElementById('output-container').style.display = 'block';
+        }
+
+        function closeOutput() { document.getElementById('output-container').style.display = 'none'; }
         function showTab(lang, btn) {
             document.querySelectorAll('.code-input').forEach(el => el.classList.remove('active'));
             document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
             document.getElementById(lang + 'Code').classList.add('active');
             btn.classList.add('active');
         }
-        function closeOutput() { document.getElementById('output-container').style.display = 'none'; }
     </script>
 </body>
 </html>
-
-
