@@ -3,100 +3,82 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Kamera</title>
+<title>Kamera Sederhana</title>
 <style>
-body{margin:0;background:#000;color:#fff;font-family:sans-serif;display:flex;flex-direction:column;height:100vh}
-video{width:100%;height:80vh;object-fit:cover;transition:.3s}
-.bar{display:flex;justify-content:center;gap:10px;padding:15px}
-button{
-padding:10px 18px;
-border:none;
-border-radius:20px;
-background:#333;
-color:#fff;
-font-size:16px
-}
-.capture{
-width:70px;height:70px;border-radius:50%;
-background:#fff;color:#000;font-size:28px
-}
+body{margin:0;background:#000;color:#fff;font-family:Arial;height:100vh;display:flex;flex-direction:column}
+#wrap{position:relative;flex:1;overflow:hidden;background:#000}
+video{width:100%;height:100%;object-fit:cover;transition:.3s ease;transform-origin:center}
+#grid{position:absolute;inset:0;background:
+linear-gradient(to right,transparent 32.8%,rgba(255,255,255,.25) 33%,transparent 33.2%,transparent 66.8%,rgba(255,255,255,.25) 67%,transparent 67.2%),
+linear-gradient(to bottom,transparent 32.8%,rgba(255,255,255,.25) 33%,transparent 33.2%,transparent 66.8%,rgba(255,255,255,.25) 67%,transparent 67.2%);
+pointer-events:none}
+.bar{display:flex;justify-content:center;gap:10px;padding:12px;background:#111}
+button{padding:10px 16px;border:none;border-radius:20px;background:#2d2d2d;color:#fff}
+.capture{width:70px;height:70px;border-radius:50%;font-size:28px;background:#fff;color:#000}
 </style>
 </head>
 <body>
-
-<video autoplay playsinline></video>
-
+<div id="wrap">
+<video id="v" autoplay playsinline></video>
+<div id="grid"></div>
+</div>
 <div class="bar">
-<button onclick="zoom(.8)">0.5</button>
-<button onclick="zoom(1)">1x</button>
-<button onclick="zoom(1.5)">2x</button>
+<button onclick="setZoom(0.5)">0.5</button>
+<button onclick="setZoom(1)">1x</button>
+<button onclick="setZoom(2)">2x</button>
 <button onclick="switchCam()">🔄</button>
 </div>
-
 <div class="bar">
-<button class="capture" onclick="photo()">📷</button>
-<button onclick="video()">🎥</button>
+<button class="capture" onclick="takePhoto()">📷</button>
+<button onclick="toggleRecord()">🎥</button>
 </div>
-
-<canvas hidden></canvas>
-
+<canvas id="c" hidden></canvas>
 <script>
-let videoEl=document.querySelector("video");
-let canvas=document.querySelector("canvas");
-let facing="environment";
-let stream;
-
+let video=document.getElementById('v'),canvas=document.getElementById('c');
+let facing="environment",stream,rec,chunks=[];
 async function start(){
-if(stream)stream.getTracks().forEach(t=>t.stop());
-stream=await navigator.mediaDevices.getUserMedia({
-video:{facingMode:facing},
-audio:true
-});
-videoEl.srcObject=stream;
+ if(stream) stream.getTracks().forEach(t=>t.stop());
+ stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:facing},audio:true});
+ video.srcObject=stream;
 }
 start();
-
-function switchCam(){
-facing=facing=="environment"?"user":"environment";
-start();
+function switchCam(){facing=facing==="environment"?"user":"environment";start();}
+function setZoom(z){
+ if(z===0.5){
+   video.style.transform="scale(.72)";
+   video.style.filter="contrast(1.08) saturate(1.1)";
+   video.style.borderRadius="30px";
+ }else if(z===1){
+   video.style.transform="scale(1)";
+   video.style.filter="none";
+   video.style.borderRadius="0";
+ }else{
+   video.style.transform="scale(1.6)";
+   video.style.filter="none";
+   video.style.borderRadius="0";
+ }
 }
-
-function zoom(x){
-videoEl.style.transform="scale("+x+")";
+function takePhoto(){
+ canvas.width=video.videoWidth; canvas.height=video.videoHeight;
+ canvas.getContext('2d').drawImage(video,0,0);
+ let a=document.createElement('a');
+ a.href=canvas.toDataURL('image/png'); a.download='foto.png'; a.click();
 }
-
-function photo(){
-canvas.width=videoEl.videoWidth;
-canvas.height=videoEl.videoHeight;
-canvas.getContext("2d").drawImage(videoEl,0,0);
-let a=document.createElement("a");
-a.href=canvas.toDataURL("image/png");
-a.download="foto.png";
-a.click();
-}
-
-let recorder,chunks=[];
-function video(){
-if(!recorder){
-recorder=new MediaRecorder(stream);
-recorder.ondataavailable=e=>chunks.push(e.data);
-recorder.onstop=()=>{
-let blob=new Blob(chunks,{type:"video/webm"});
-let a=document.createElement("a");
-a.href=URL.createObjectURL(blob);
-a.download="video.webm";
-a.click();
-chunks=[];
-recorder=null;
-};
-recorder.start();
-alert("Rekam dimulai");
-}else{
-recorder.stop();
-alert("Video disimpan");
-}
+function toggleRecord(){
+ if(!rec){
+   rec=new MediaRecorder(stream);
+   rec.ondataavailable=e=>chunks.push(e.data);
+   rec.onstop=()=>{
+    let blob=new Blob(chunks,{type:'video/webm'});
+    let a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download='video.webm';
+    a.click();
+    chunks=[]; rec=null;
+   };
+   rec.start(); alert('Mulai merekam');
+ }else{ rec.stop(); alert('Rekaman disimpan'); }
 }
 </script>
-
 </body>
 </html>
